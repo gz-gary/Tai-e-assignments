@@ -54,13 +54,14 @@ class IterativeSolver<Node, Fact> extends Solver<Node, Fact> {
                         result.getInFact(succ),
                         meet_of_all_succs
                     );
-                    if_changes_to_any_IN_occur
-                        |= analysis.transferNode(
-                            node,
-                            result.getInFact(node),
-                            result.getOutFact(node)
-                        );
                 }
+                result.setOutFact(node, meet_of_all_succs);
+                if_changes_to_any_IN_occur
+                    |= analysis.transferNode(
+                        node,
+                        result.getInFact(node),
+                        result.getOutFact(node)
+                    );
             }
         } while (if_changes_to_any_IN_occur);
     }
