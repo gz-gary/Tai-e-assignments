@@ -44,12 +44,8 @@ class IterativeSolver<Node, Fact> extends Solver<Node, Fact> {
             if_changes_to_any_IN_occur = false;
             for (Node node : cfg) {
                 if (cfg.isExit(node)) continue;
-                Fact meet_of_all_succs = null;
+                Fact meet_of_all_succs = analysis.newInitialFact();
                 for (Node succ : cfg.getSuccsOf(node)) {
-                    if (meet_of_all_succs == null) {
-                        meet_of_all_succs = result.getInFact(succ);
-                        continue;
-                    }
                     analysis.meetInto(
                         result.getInFact(succ),
                         meet_of_all_succs

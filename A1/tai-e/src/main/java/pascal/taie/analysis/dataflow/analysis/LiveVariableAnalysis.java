@@ -57,7 +57,7 @@ public class LiveVariableAnalysis extends
 
     @Override
     public void meetInto(SetFact<Var> fact, SetFact<Var> target) {
-        target.unionWith(fact);
+        target.union(fact);
     }
 
     @Override
