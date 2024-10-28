@@ -195,6 +195,15 @@ public class ConstantPropagation extends
                     }
                 } else return Value.getNAC();
             } else if (value1.isNAC() || value2.isNAC()) {
+                /* Corner case for NAC / 0 and NAC % 0 */
+                if (value1.isNAC() && value2.isConstant() && value2.getConstant() == 0) {
+                    if (exp_BinaryExp instanceof ArithmeticExp exp_ArithmeticExp) {
+                        if (exp_ArithmeticExp.getOperator() == ArithmeticExp.Op.DIV
+                            || exp_ArithmeticExp.getOperator() == ArithmeticExp.Op.REM) {
+                            return Value.getUndef();
+                        }
+                    }
+                }
                 return Value.getNAC();
             } else return Value.getUndef();
         } else return Value.getNAC();
