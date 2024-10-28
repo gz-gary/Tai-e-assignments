@@ -89,7 +89,7 @@ public class ConstantPropagation extends
         if (v2.isUndef()) return v1;
         assert v1.isConstant();
         assert v2.isConstant();
-        return v1.equals(v2) ? v1 : Value.getNAC();
+        return v1.getConstant() == v2.getConstant() ? Value.makeConstant(v1.getConstant()) : Value.getNAC();
     }
 
     @Override
