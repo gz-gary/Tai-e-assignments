@@ -40,6 +40,9 @@ import pascal.taie.language.classes.JMethod;
 import pascal.taie.language.type.PrimitiveType;
 import pascal.taie.language.type.Type;
 import pascal.taie.util.AnalysisException;
+import pascal.taie.ir.stmt.AssignStmt;
+import pascal.taie.ir.stmt.Invoke;
+import pascal.taie.ir.stmt.LoadField;
 
 public class ConstantPropagation extends
         AbstractDataflowAnalysis<Stmt, CPFact> {
@@ -92,11 +95,16 @@ public class ConstantPropagation extends
     @Override
     public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
         CPFact in_copy = in.copy();
-        boolean is_valid = stmt.getDef().isPresent() && (!stmt.getUses().isEmpty());
-        if (is_valid) {
+        if (stmt instanceof AssignStmt assign_stmt) {
             Var def = (Var)stmt.getDef().get();
-            Value def_v = evaluate((Exp)stmt.getUses().get(0), in);
+            Value def_v = evaluate(assign_stmt.getRValue(), in);
             in_copy.update(def, def_v);
+            return out.copyFrom(in_copy);
+        } else if ((stmt instanceof Invoke) || (stmt instanceof LoadField)) {
+            if (stmt.getDef().isPresent()) {
+                Var def = (Var)stmt.getDef().get();
+                in_copy.update(def, Value.getNAC());
+            }
             return out.copyFrom(in_copy);
         } else {
             return out.copyFrom(in_copy);
