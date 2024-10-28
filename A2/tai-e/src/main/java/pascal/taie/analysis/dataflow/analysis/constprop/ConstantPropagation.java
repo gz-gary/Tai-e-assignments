@@ -25,7 +25,6 @@ package pascal.taie.analysis.dataflow.analysis.constprop;
 import pascal.taie.analysis.dataflow.analysis.AbstractDataflowAnalysis;
 import pascal.taie.analysis.graph.cfg.CFG;
 import pascal.taie.config.AnalysisConfig;
-import pascal.taie.ir.IR;
 import pascal.taie.ir.exp.ArithmeticExp;
 import pascal.taie.ir.exp.BinaryExp;
 import pascal.taie.ir.exp.BitwiseExp;
@@ -34,9 +33,7 @@ import pascal.taie.ir.exp.Exp;
 import pascal.taie.ir.exp.IntLiteral;
 import pascal.taie.ir.exp.ShiftExp;
 import pascal.taie.ir.exp.Var;
-import pascal.taie.ir.stmt.DefinitionStmt;
 import pascal.taie.ir.stmt.Stmt;
-import pascal.taie.language.classes.JMethod;
 import pascal.taie.language.type.PrimitiveType;
 import pascal.taie.language.type.Type;
 import pascal.taie.util.AnalysisException;
@@ -61,8 +58,7 @@ public class ConstantPropagation extends
     @Override
     public CPFact newBoundaryFact(CFG<Stmt> cfg) {
         CPFact boundary = new CPFact();
-        JMethod method = cfg.getMethod();
-        for (Var param : method.getIR().getParams()) {
+        for (Var param : cfg.getIR().getParams()) {
             boundary.update(param, Value.getNAC());
         }
         return boundary;
