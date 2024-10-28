@@ -56,19 +56,19 @@ public class ConstantPropagation extends
 
     @Override
     public CPFact newBoundaryFact(CFG<Stmt> cfg) {
-        // TODO - finish me
-        return null;
+        return new CPFact();
     }
 
     @Override
     public CPFact newInitialFact() {
-        // TODO - finish me
-        return null;
+        return new CPFact();
     }
 
     @Override
     public void meetInto(CPFact fact, CPFact target) {
-        // TODO - finish me
+        for (Var v : fact.keySet()) {
+            target.update(v, meetValue(fact.get(v), target.get(v)));
+        }
     }
 
     /**
@@ -85,8 +85,14 @@ public class ConstantPropagation extends
 
     @Override
     public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
-        // TODO - finish me
-        return false;
+        boolean is_valid = stmt.getDef().isPresent() && (!stmt.getUses().isEmpty());
+        if (is_valid) {
+            Var def = (Var)stmt.getDef().get();
+            Value def_v = evaluate((Exp)stmt.getUses().get(0), in);
+            return out.update(def, def_v);
+        } else {
+            return false;
+        }
     }
 
     /**
@@ -175,7 +181,6 @@ public class ConstantPropagation extends
             } else if (value1.isNAC() || value2.isNAC()) {
                 return Value.getNAC();
             } else return Value.getUndef();
-        }
-        return null;
+        } else return Value.getNAC();
     }
 }
