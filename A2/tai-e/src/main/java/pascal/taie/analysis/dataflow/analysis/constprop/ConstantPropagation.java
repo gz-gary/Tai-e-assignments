@@ -36,6 +36,7 @@ import pascal.taie.ir.exp.ShiftExp;
 import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.DefinitionStmt;
 import pascal.taie.ir.stmt.Stmt;
+import pascal.taie.language.classes.JMethod;
 import pascal.taie.language.type.PrimitiveType;
 import pascal.taie.language.type.Type;
 import pascal.taie.util.AnalysisException;
@@ -56,7 +57,12 @@ public class ConstantPropagation extends
 
     @Override
     public CPFact newBoundaryFact(CFG<Stmt> cfg) {
-        return new CPFact();
+        CPFact boundary = new CPFact();
+        JMethod method = cfg.getMethod();
+        for (Var param : method.getIR().getParams()) {
+            boundary.update(param, Value.getNAC());
+        }
+        return boundary;
     }
 
     @Override
@@ -85,13 +91,15 @@ public class ConstantPropagation extends
 
     @Override
     public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
+        CPFact in_copy = in.copy();
         boolean is_valid = stmt.getDef().isPresent() && (!stmt.getUses().isEmpty());
         if (is_valid) {
             Var def = (Var)stmt.getDef().get();
             Value def_v = evaluate((Exp)stmt.getUses().get(0), in);
-            return out.update(def, def_v);
+            in_copy.update(def, def_v);
+            return out.copyFrom(in_copy);
         } else {
-            return false;
+            return out.copyFrom(in_copy);
         }
     }
 
