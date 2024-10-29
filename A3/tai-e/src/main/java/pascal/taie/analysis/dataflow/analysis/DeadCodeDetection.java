@@ -48,6 +48,8 @@ import pascal.taie.ir.stmt.SwitchStmt;
 import java.util.Comparator;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.LinkedList;
+import java.util.Queue;
 
 public class DeadCodeDetection extends MethodAnalysis {
 
@@ -71,6 +73,36 @@ public class DeadCodeDetection extends MethodAnalysis {
         Set<Stmt> deadCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
         // TODO - finish me
         // Your task is to recognize dead code in ir and add it to deadCode
+
+        /* Bfs algorithm to traverse CFG */
+        Set<Stmt> controlFlowUnreachableCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
+        for (Stmt stmt : cfg) {
+            controlFlowUnreachableCode.add(stmt);
+        }
+
+        Queue<Stmt> queueOfStmt = new LinkedList<Stmt>();
+        Set<Stmt> stmtEnqueued = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
+
+        queueOfStmt.offer(cfg.getEntry());
+        stmtEnqueued.add(cfg.getEntry());
+
+        while (!queueOfStmt.isEmpty()) {
+            Stmt stmt = queueOfStmt.poll();
+            assert stmt != null;
+
+            /* every statement we can traverse to is reachable */
+            controlFlowUnreachableCode.remove(stmt);
+
+            for (Stmt succ : cfg.getSuccsOf(stmt)) {
+
+                /* never traverse to visited node */
+                if (stmtEnqueued.contains(succ)) continue;
+
+                queueOfStmt.offer(succ);
+                stmtEnqueued.add(succ);
+            }
+        }
+        deadCode.addAll(controlFlowUnreachableCode);
         return deadCode;
     }
 
