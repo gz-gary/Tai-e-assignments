@@ -26,6 +26,9 @@ import pascal.taie.analysis.dataflow.analysis.DataflowAnalysis;
 import pascal.taie.analysis.dataflow.fact.DataflowResult;
 import pascal.taie.analysis.graph.cfg.CFG;
 
+import java.util.LinkedList;
+import java.util.Queue;
+
 class WorkListSolver<Node, Fact> extends Solver<Node, Fact> {
 
     WorkListSolver(DataflowAnalysis<Node, Fact> analysis) {
@@ -34,11 +37,49 @@ class WorkListSolver<Node, Fact> extends Solver<Node, Fact> {
 
     @Override
     protected void doSolveForward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
-        // TODO - finish me
+        Queue<Node> worklist = new LinkedList<Node>();
+        for (Node node : cfg) worklist.offer(node);
+
+        while (!worklist.isEmpty()) {
+            Node node = worklist.poll();
+            assert node != null;
+
+            Fact meet_of_all_preds = analysis.newInitialFact();
+            for (Node pred : cfg.getPredsOf(node)) {
+                analysis.meetInto(result.getOutFact(pred), meet_of_all_preds);
+            }
+            result.setInFact(node, meet_of_all_preds);
+
+            boolean if_out_changed = analysis.transferNode(node, result.getInFact(node), result.getOutFact(node));
+            if (if_out_changed) {
+                for (Node succ : cfg.getSuccsOf(node)) {
+                    worklist.offer(succ);
+                }
+            }
+        }
     }
 
     @Override
     protected void doSolveBackward(CFG<Node> cfg, DataflowResult<Node, Fact> result) {
-        // TODO - finish me
+        Queue<Node> worklist = new LinkedList<Node>();
+        for (Node node : cfg) worklist.offer(node);
+
+        while (!worklist.isEmpty()) {
+            Node node = worklist.poll();
+            assert node != null;
+
+            Fact meet_of_all_succs = analysis.newInitialFact();
+            for (Node succ : cfg.getSuccsOf(node)) {
+                analysis.meetInto(result.getInFact(succ), meet_of_all_succs);
+            }
+            result.setOutFact(node, meet_of_all_succs);
+
+            boolean if_in_changed = analysis.transferNode(node, result.getInFact(node), result.getOutFact(node));
+            if (if_in_changed) {
+                for (Node pred : cfg.getPredsOf(node)) {
+                    worklist.offer(pred);
+                }
+            }
+        }
     }
 }
