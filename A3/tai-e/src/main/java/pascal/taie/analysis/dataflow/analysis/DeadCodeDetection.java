@@ -41,6 +41,7 @@ import pascal.taie.ir.exp.NewExp;
 import pascal.taie.ir.exp.RValue;
 import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.AssignStmt;
+import pascal.taie.ir.stmt.DefinitionStmt;
 import pascal.taie.ir.stmt.If;
 import pascal.taie.ir.stmt.Stmt;
 import pascal.taie.ir.stmt.SwitchStmt;
@@ -74,7 +75,7 @@ public class DeadCodeDetection extends MethodAnalysis {
         // TODO - finish me
         // Your task is to recognize dead code in ir and add it to deadCode
 
-        /* Bfs algorithm to traverse CFG */
+        /* Find control-flow-unreachable code: use BFS algorithm to traverse on CFG */
         Set<Stmt> controlFlowUnreachableCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
         for (Stmt stmt : cfg) {
             controlFlowUnreachableCode.add(stmt);
@@ -103,6 +104,27 @@ public class DeadCodeDetection extends MethodAnalysis {
             }
         }
         deadCode.addAll(controlFlowUnreachableCode);
+
+        /* Find useless-assignment */
+        Set<Stmt> uselessAssignment = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
+        for (Stmt stmt : cfg) {
+            /*
+             * 1. This statement is truely a definition statement.
+             * 2 & 3. This statement defines some variable.
+             * 4. Right value of this definition has no side effect.
+             * 5. The variable this definition defines is never used after definition. (live).
+             */
+            if ((stmt instanceof DefinitionStmt definitionStmt) && 
+                (definitionStmt.getDef().isPresent()) && 
+                (definitionStmt.getDef().get() instanceof Var def) &&
+                (hasNoSideEffect(definitionStmt.getRValue())) &&
+                (!liveVars.getOutFact(stmt).contains(def))
+            ) {
+                uselessAssignment.add(stmt);
+            }
+        }
+        deadCode.addAll(uselessAssignment);
+
         return deadCode;
     }
 
