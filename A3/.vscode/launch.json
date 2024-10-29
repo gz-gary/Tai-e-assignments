@@ -16,7 +16,7 @@
             "request": "launch",
             "mainClass": "pascal.taie.Assignment",
             "projectName": "tai-e",
-            "args": ["-cp", "src/test/resources/dataflow/deadcode", "-m", "DeadAssignment"],
+            "args": ["-cp", "src/test/resources/dataflow/deadcode", "-m", "UnreachableSwitchBranch"],
             "cwd": "${workspaceFolder}/tai-e"
         }
     ]

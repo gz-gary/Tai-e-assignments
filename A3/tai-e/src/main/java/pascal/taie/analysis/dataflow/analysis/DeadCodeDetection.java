@@ -51,6 +51,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.LinkedList;
 import java.util.Queue;
+import java.util.List;
 
 public class DeadCodeDetection extends MethodAnalysis {
 
@@ -104,6 +105,28 @@ public class DeadCodeDetection extends MethodAnalysis {
                         continue;
                     Stmt succ = edge.getTarget();
 
+                    if (stmtEnqueued.contains(succ)) continue;
+
+                    queueOfStmt.offer(succ);
+                    stmtEnqueued.add(succ);
+                }
+            } else if (stmt instanceof SwitchStmt switchStmt) {
+                Value val = constants.getInFact(switchStmt).get(switchStmt.getVar());
+                List<Stmt> targets = switchStmt.getTargets();
+                List<Integer> values = switchStmt.getCaseValues();
+                boolean never_go_default = false;
+                for (int i = 0; i < targets.size(); ++i) {
+                    Stmt succ = targets.get(i);
+                    if (!val.equals(Value.makeConstant(values.get(i)))) continue;
+                    if (val.isConstant() && (values.get(i) == val.getConstant())) never_go_default = true;
+
+                    if (stmtEnqueued.contains(succ)) continue;
+
+                    queueOfStmt.offer(succ);
+                    stmtEnqueued.add(succ);
+                }
+                if (!never_go_default) {
+                    Stmt succ = switchStmt.getDefaultTarget();
                     if (stmtEnqueued.contains(succ)) continue;
 
                     queueOfStmt.offer(succ);
