@@ -76,10 +76,10 @@ public class DeadCodeDetection extends MethodAnalysis {
         // Your task is to recognize dead code in ir and add it to deadCode
 
         /* Find control-flow-unreachable code: use BFS algorithm to traverse on CFG */
-        Set<Stmt> controlFlowUnreachableCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
+        Set<Stmt> unreachableCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
         for (Stmt stmt : cfg) {
             if (stmt.getLineNumber() >= 0)
-                controlFlowUnreachableCode.add(stmt);
+                unreachableCode.add(stmt);
         }
 
         Queue<Stmt> queueOfStmt = new LinkedList<Stmt>();
@@ -93,58 +93,7 @@ public class DeadCodeDetection extends MethodAnalysis {
             assert stmt != null;
 
             /* every statement we can traverse to is reachable */
-            controlFlowUnreachableCode.remove(stmt);
-
-            for (Stmt succ : cfg.getSuccsOf(stmt)) {
-
-                /* never traverse to visited node */
-                if (stmtEnqueued.contains(succ)) continue;
-
-                queueOfStmt.offer(succ);
-                stmtEnqueued.add(succ);
-            }
-        }
-        deadCode.addAll(controlFlowUnreachableCode);
-
-        /* Find useless-assignment */
-        Set<Stmt> uselessAssignment = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
-        for (Stmt stmt : cfg) {
-            /*
-             * 1. This statement is truely a definition statement.
-             * 2 & 3. This statement defines some variable.
-             * 4. Right value of this definition has no side effect.
-             * 5. The variable this definition defines is never used after definition. (live).
-             */
-            if ((stmt instanceof DefinitionStmt definitionStmt) && 
-                (definitionStmt.getDef().isPresent()) && 
-                (definitionStmt.getDef().get() instanceof Var def) &&
-                (hasNoSideEffect(definitionStmt.getRValue())) &&
-                (!liveVars.getOutFact(stmt).contains(def))
-            ) {
-                uselessAssignment.add(stmt);
-            }
-        }
-        deadCode.addAll(uselessAssignment);
-
-        /* Find unreachable branch */
-        Set<Stmt> unreachableBranch = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
-        for (Stmt stmt : cfg) {
-            if (stmt.getLineNumber() >= 0)
-                unreachableBranch.add(stmt);
-        }
-
-        queueOfStmt.clear();
-        stmtEnqueued.clear();
-
-        queueOfStmt.offer(cfg.getEntry());
-        stmtEnqueued.add(cfg.getEntry());
-
-        while (!queueOfStmt.isEmpty()) {
-            Stmt stmt = queueOfStmt.poll();
-            assert stmt != null;
-
-            /* every statement we can traverse to is reachable */
-            unreachableBranch.remove(stmt);
+            unreachableCode.remove(stmt);
 
             if (stmt instanceof If ifStmt) {
                 Value val = ConstantPropagation.evaluate(ifStmt.getCondition(), constants.getInFact(ifStmt));
@@ -171,7 +120,27 @@ public class DeadCodeDetection extends MethodAnalysis {
                 }
             }
         }
-        deadCode.addAll(unreachableBranch);
+        deadCode.addAll(unreachableCode);
+
+        /* Find useless-assignment */
+        Set<Stmt> uselessAssignment = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
+        for (Stmt stmt : cfg) {
+            /*
+             * 1. This statement is truely a definition statement.
+             * 2 & 3. This statement defines some variable.
+             * 4. Right value of this definition has no side effect.
+             * 5. The variable this definition defines is never used after definition. (live).
+             */
+            if ((stmt instanceof DefinitionStmt definitionStmt) && 
+                (definitionStmt.getDef().isPresent()) && 
+                (definitionStmt.getDef().get() instanceof Var def) &&
+                (hasNoSideEffect(definitionStmt.getRValue())) &&
+                (!liveVars.getOutFact(stmt).contains(def))
+            ) {
+                uselessAssignment.add(stmt);
+            }
+        }
+        deadCode.addAll(uselessAssignment);
 
         return deadCode;
     }
