@@ -38,6 +38,7 @@ import pascal.taie.language.type.PrimitiveType;
 import pascal.taie.language.type.Type;
 import pascal.taie.util.AnalysisException;
 import pascal.taie.ir.stmt.AssignStmt;
+import pascal.taie.ir.stmt.DefinitionStmt;
 import pascal.taie.ir.stmt.Invoke;
 import pascal.taie.ir.stmt.LoadField;
 
@@ -59,7 +60,9 @@ public class ConstantPropagation extends
     public CPFact newBoundaryFact(CFG<Stmt> cfg) {
         CPFact boundary = new CPFact();
         for (Var param : cfg.getIR().getParams()) {
-            boundary.update(param, Value.getNAC());
+            if (canHoldInt(param)) {
+                boundary.update(param, Value.getNAC());
+            }
         }
         return boundary;
     }
@@ -91,20 +94,15 @@ public class ConstantPropagation extends
     @Override
     public boolean transferNode(Stmt stmt, CPFact in, CPFact out) {
         CPFact in_copy = in.copy();
-        if (stmt instanceof AssignStmt assign_stmt) {
-            Var def = (Var)stmt.getDef().get();
-            Value def_v = evaluate(assign_stmt.getRValue(), in);
-            in_copy.update(def, def_v);
-            return out.copyFrom(in_copy);
-        } else if ((stmt instanceof Invoke) || (stmt instanceof LoadField)) {
-            if (stmt.getDef().isPresent()) {
-                Var def = (Var)stmt.getDef().get();
-                in_copy.update(def, Value.getNAC());
+        if (stmt instanceof DefinitionStmt definition_stmt) {
+            if (stmt.getDef().isPresent() && (stmt.getDef().get() instanceof Var def)) {
+                if (canHoldInt(def)) {
+                    Value def_v = evaluate(definition_stmt.getRValue(), in);
+                    in_copy.update(def, def_v);
+                }
             }
-            return out.copyFrom(in_copy);
-        } else {
-            return out.copyFrom(in_copy);
         }
+        return out.copyFrom(in_copy);
     }
 
     /**
@@ -144,6 +142,8 @@ public class ConstantPropagation extends
 
             Value value1 = in.get(operand1);
             Value value2 = in.get(operand2);
+
+            if (value1.isUndef() || value2.isUndef()) return Value.getUndef();
 
             if (value1.isConstant() && value2.isConstant()) {
                 int i1 = value1.getConstant();
@@ -201,7 +201,7 @@ public class ConstantPropagation extends
                     }
                 }
                 return Value.getNAC();
-            } else return Value.getUndef();
+            } else return Value.getNAC();
         } else return Value.getNAC();
     }
 }
