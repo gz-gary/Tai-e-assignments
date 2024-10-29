@@ -73,14 +73,12 @@ public class DeadCodeDetection extends MethodAnalysis {
                 ir.getResult(LiveVariableAnalysis.ID);
         // keep statements (dead code) sorted in the resulting set
         Set<Stmt> deadCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
-        // TODO - finish me
         // Your task is to recognize dead code in ir and add it to deadCode
 
         /* Find control-flow-unreachable code: use BFS algorithm to traverse on CFG */
         Set<Stmt> unreachableCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
-        for (Stmt stmt : cfg) {
-            if (stmt.getLineNumber() >= 0)
-                unreachableCode.add(stmt);
+        for (Stmt stmt : ir) {
+            unreachableCode.add(stmt);
         }
 
         Queue<Stmt> queueOfStmt = new LinkedList<Stmt>();
@@ -105,41 +103,50 @@ public class DeadCodeDetection extends MethodAnalysis {
                         continue;
                     Stmt succ = edge.getTarget();
 
-                    if (stmtEnqueued.contains(succ)) continue;
-
-                    queueOfStmt.offer(succ);
-                    stmtEnqueued.add(succ);
+                    if (!stmtEnqueued.contains(succ)) {
+                        queueOfStmt.offer(succ);
+                        stmtEnqueued.add(succ);
+                    }
                 }
             } else if (stmt instanceof SwitchStmt switchStmt) {
                 Value val = constants.getInFact(switchStmt).get(switchStmt.getVar());
                 List<Stmt> targets = switchStmt.getTargets();
                 List<Integer> values = switchStmt.getCaseValues();
-                boolean never_go_default = false;
-                for (int i = 0; i < targets.size(); ++i) {
-                    Stmt succ = targets.get(i);
-                    if (!val.equals(Value.makeConstant(values.get(i)))) continue;
-                    if (val.isConstant() && (values.get(i) == val.getConstant())) never_go_default = true;
+                if (val.isConstant()) {
+                    boolean go_default = true;
+                    for (int i = 0; i < targets.size(); ++i) {
+                        Stmt succ = targets.get(i);
+                        if (val.getConstant() != values.get(i)) continue;
+                        go_default = false;
 
-                    if (stmtEnqueued.contains(succ)) continue;
-
-                    queueOfStmt.offer(succ);
-                    stmtEnqueued.add(succ);
-                }
-                if (!never_go_default) {
-                    Stmt succ = switchStmt.getDefaultTarget();
-                    if (stmtEnqueued.contains(succ)) continue;
-
-                    queueOfStmt.offer(succ);
-                    stmtEnqueued.add(succ);
+                        if (!stmtEnqueued.contains(succ)) {
+                            queueOfStmt.offer(succ);
+                            stmtEnqueued.add(succ);
+                        }
+                    }
+                    if (go_default) {
+                        Stmt succ = switchStmt.getDefaultTarget();
+                        if (!stmtEnqueued.contains(succ)) {
+                            queueOfStmt.offer(succ);
+                            stmtEnqueued.add(succ);
+                        }
+                    }
+                } else {
+                    for (Stmt succ : cfg.getSuccsOf(stmt)) {
+                        /* never traverse to visited node */
+                        if (!stmtEnqueued.contains(succ)) {
+                            queueOfStmt.offer(succ);
+                            stmtEnqueued.add(succ);
+                        }
+                    }
                 }
             } else {
                 for (Stmt succ : cfg.getSuccsOf(stmt)) {
-
                     /* never traverse to visited node */
-                    if (stmtEnqueued.contains(succ)) continue;
-
-                    queueOfStmt.offer(succ);
-                    stmtEnqueued.add(succ);
+                    if (!stmtEnqueued.contains(succ)) {
+                        queueOfStmt.offer(succ);
+                        stmtEnqueued.add(succ);
+                    }
                 }
             }
         }
@@ -147,7 +154,7 @@ public class DeadCodeDetection extends MethodAnalysis {
 
         /* Find useless-assignment */
         Set<Stmt> uselessAssignment = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
-        for (Stmt stmt : cfg) {
+        for (Stmt stmt : ir) {
             /*
              * 1. This statement is truely a definition statement.
              * 2 & 3. This statement defines some variable.
