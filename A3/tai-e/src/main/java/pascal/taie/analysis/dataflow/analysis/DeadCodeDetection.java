@@ -78,7 +78,8 @@ public class DeadCodeDetection extends MethodAnalysis {
         /* Find control-flow-unreachable code: use BFS algorithm to traverse on CFG */
         Set<Stmt> controlFlowUnreachableCode = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
         for (Stmt stmt : cfg) {
-            controlFlowUnreachableCode.add(stmt);
+            if (stmt.getLineNumber() >= 0)
+                controlFlowUnreachableCode.add(stmt);
         }
 
         Queue<Stmt> queueOfStmt = new LinkedList<Stmt>();
@@ -124,6 +125,53 @@ public class DeadCodeDetection extends MethodAnalysis {
             }
         }
         deadCode.addAll(uselessAssignment);
+
+        /* Find unreachable branch */
+        Set<Stmt> unreachableBranch = new TreeSet<>(Comparator.comparing(Stmt::getIndex));
+        for (Stmt stmt : cfg) {
+            if (stmt.getLineNumber() >= 0)
+                unreachableBranch.add(stmt);
+        }
+
+        queueOfStmt.clear();
+        stmtEnqueued.clear();
+
+        queueOfStmt.offer(cfg.getEntry());
+        stmtEnqueued.add(cfg.getEntry());
+
+        while (!queueOfStmt.isEmpty()) {
+            Stmt stmt = queueOfStmt.poll();
+            assert stmt != null;
+
+            /* every statement we can traverse to is reachable */
+            unreachableBranch.remove(stmt);
+
+            if (stmt instanceof If ifStmt) {
+                Value val = ConstantPropagation.evaluate(ifStmt.getCondition(), constants.getInFact(ifStmt));
+                for (Edge<Stmt> edge : cfg.getOutEdgesOf(ifStmt)) {
+                    if (edge.getKind() == Edge.Kind.IF_TRUE && val.equals(Value.makeConstant(0)))
+                        continue;
+                    if (edge.getKind() == Edge.Kind.IF_FALSE && val.equals(Value.makeConstant(1)))
+                        continue;
+                    Stmt succ = edge.getTarget();
+
+                    if (stmtEnqueued.contains(succ)) continue;
+
+                    queueOfStmt.offer(succ);
+                    stmtEnqueued.add(succ);
+                }
+            } else {
+                for (Stmt succ : cfg.getSuccsOf(stmt)) {
+
+                    /* never traverse to visited node */
+                    if (stmtEnqueued.contains(succ)) continue;
+
+                    queueOfStmt.offer(succ);
+                    stmtEnqueued.add(succ);
+                }
+            }
+        }
+        deadCode.addAll(unreachableBranch);
 
         return deadCode;
     }
