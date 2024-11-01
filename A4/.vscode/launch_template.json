@@ -1,0 +1,25 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Current File",
+            "request": "launch",
+            "mainClass": "${file}",
+            "cwd": "${workspaceFolder}/tai-e"
+        },
+        {
+            "type": "java",
+            "name": "Debug Gradle Project",
+            "preLaunchTask": "build",
+            "request": "launch",
+            "mainClass": "pascal.taie.Assignment",
+            "projectName": "tai-e",
+            "args": ["-cp", "src/test/resources/cha", "-m", "StaticCall"],
+            "cwd": "${workspaceFolder}/tai-e"
+        }
+    ]
+}
