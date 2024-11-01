@@ -59,7 +59,13 @@ class InterSolver<Method, Node, Fact> {
     }
 
     private void initialize() {
-        // TODO - finish me
+        for (Node node : icfg) {
+            result.setOutFact(node, analysis.newInitialFact());
+        }
+        icfg.entryMethods().forEach(entryMethod -> {
+            Node entry = icfg.getEntryOf(entryMethod);
+            result.setOutFact(entry, analysis.newBoundaryFact(entry));
+        });
     }
 
     private void doSolve() {
