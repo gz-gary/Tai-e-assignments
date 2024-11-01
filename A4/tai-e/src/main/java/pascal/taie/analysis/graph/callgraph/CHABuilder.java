@@ -29,10 +29,13 @@ import pascal.taie.language.classes.ClassHierarchy;
 import pascal.taie.language.classes.JClass;
 import pascal.taie.language.classes.JMethod;
 import pascal.taie.language.classes.Subsignature;
+import soot.coffi.class_element_value;
 
 import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.Set;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
 
 /**
  * Implementation of the CHA algorithm.
@@ -50,7 +53,29 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
     private CallGraph<Invoke, JMethod> buildCallGraph(JMethod entry) {
         DefaultCallGraph callGraph = new DefaultCallGraph();
         callGraph.addEntryMethod(entry);
-        // TODO - finish me
+
+        Queue<JMethod> worklist = new LinkedList<>();
+        worklist.offer(entry);
+
+        while (!worklist.isEmpty()) {
+            JMethod method = worklist.poll();
+            if (!callGraph.addReachableMethod(method)) continue;
+
+            for (Invoke callsite : callGraph.getCallSitesIn(method)) {
+                CallKind callKind = CallKind.OTHER;
+                if (callsite.isStatic()) callKind = CallKind.STATIC;
+                if (callsite.isSpecial()) callKind = CallKind.SPECIAL;
+                if (callsite.isInterface()) callKind = CallKind.INTERFACE;
+                if (callsite.isVirtual()) callKind = CallKind.VIRTUAL;
+
+                Set<JMethod> possiblMethods = resolve(callsite);
+                for (JMethod target : possiblMethods) {
+                    callGraph.addEdge(new Edge<Invoke,JMethod>(callKind, callsite, target));
+                    worklist.offer(target);
+                }
+            }
+        }
+
         return callGraph;
     }
 
@@ -58,8 +83,43 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
      * Resolves call targets (callees) of a call site via CHA.
      */
     private Set<JMethod> resolve(Invoke callSite) {
-        // TODO - finish me
-        return null;
+        Set<JMethod> result = new LinkedHashSet<JMethod>();
+        MethodRef methodRef = callSite.getMethodRef();
+        Subsignature subSignature = methodRef.getSubsignature();
+        JClass declClass = methodRef.getDeclaringClass();
+        if (callSite.isStatic()) {
+            result.add(declClass.getDeclaredMethod(subSignature));
+        }
+        if (callSite.isSpecial()) {
+            result.add(dispatch(declClass, subSignature));
+        }
+        if (callSite.isVirtual() || callSite.isInterface()) {
+            Queue<JClass> queue = new ArrayDeque<JClass>();
+            queue.offer(declClass);
+            while (!queue.isEmpty()) {
+                JClass jclass = queue.poll();
+                assert jclass != null;
+
+                result.add(dispatch(jclass, subSignature));
+                for (JClass subClass : hierarchy.getDirectSubclassesOf(jclass)) {
+                    if (!queue.contains(subClass)) {
+                        queue.offer(subClass);
+                    }
+                }
+                for (JClass subInterface : hierarchy.getDirectSubinterfacesOf(jclass)) {
+                    if (!queue.contains(subInterface)) {
+                        queue.offer(subInterface);
+                    }
+                }
+                for (JClass implementor : hierarchy.getDirectImplementorsOf(jclass)) {
+                    if (!queue.contains(implementor)) {
+                        queue.offer(implementor);
+                    }
+                }
+            }
+        }
+        result.remove(null);
+        return result;
     }
 
     /**
@@ -70,7 +130,11 @@ class CHABuilder implements CGBuilder<Invoke, JMethod> {
      */
     private JMethod dispatch(JClass jclass, Subsignature subsignature) {
         JMethod method = jclass.getDeclaredMethod(subsignature);
-        if (method == null) return dispatch(jclass.getSuperClass(), subsignature);
-        else return method;
+        if (method == null || method.isAbstract()) {
+            JClass superClass = jclass.getSuperClass();
+            return superClass == null ? null : dispatch(superClass, subsignature);
+        } else {
+            return method;
+        }
     }
 }
