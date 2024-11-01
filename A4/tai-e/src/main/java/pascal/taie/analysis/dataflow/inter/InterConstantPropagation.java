@@ -37,6 +37,7 @@ import pascal.taie.ir.exp.InvokeExp;
 import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.Invoke;
 import pascal.taie.ir.stmt.Stmt;
+import pascal.taie.ir.stmt.DefinitionStmt;
 import pascal.taie.language.classes.JMethod;
 
 /**
@@ -77,14 +78,26 @@ public class InterConstantPropagation extends
 
     @Override
     protected boolean transferCallNode(Stmt stmt, CPFact in, CPFact out) {
-        // TODO - finish me
-        return false;
+        /* 
+         * For call nodes, the transfer function is identity function.
+         * Leave the handling of the LHS variable (return value) to edge transfer.
+         */
+        CPFact in_copy = in.copy();
+        return out.copyFrom(in_copy);
     }
 
     @Override
     protected boolean transferNonCallNode(Stmt stmt, CPFact in, CPFact out) {
-        // TODO - finish me
-        return false;
+        CPFact in_copy = in.copy();
+        if (stmt instanceof DefinitionStmt definition_stmt) {
+            if (stmt.getDef().isPresent() && (stmt.getDef().get() instanceof Var def)) {
+                if (ConstantPropagation.canHoldInt(def)) {
+                    Value def_v = ConstantPropagation.evaluate(definition_stmt.getRValue(), in);
+                    in_copy.update(def, def_v);
+                }
+            }
+        }
+        return out.copyFrom(in_copy);
     }
 
     @Override
