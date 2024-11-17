@@ -22,16 +22,12 @@
 
 package pascal.taie.analysis.dataflow.inter;
 
+import java.util.LinkedList;
+import java.util.Queue;
+
 import pascal.taie.analysis.dataflow.fact.DataflowResult;
 import pascal.taie.analysis.graph.icfg.ICFG;
 import pascal.taie.analysis.graph.icfg.ICFGEdge;
-import pascal.taie.analysis.graph.icfg.NormalEdge;
-import pascal.taie.util.collection.SetQueue;
-
-import java.util.LinkedList;
-import java.util.Queue;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Solver for inter-procedural data-flow analysis.
@@ -52,6 +48,7 @@ class InterSolver<Method, Node, Fact> {
                 ICFG<Method, Node> icfg) {
         this.analysis = analysis;
         this.icfg = icfg;
+        this.workList = new LinkedList<>();
     }
 
     DataflowResult<Node, Fact> solve() {
@@ -72,11 +69,11 @@ class InterSolver<Method, Node, Fact> {
     }
 
     private void doSolve() {
-        Queue<Node> worklist = new LinkedList<Node>();
-        for (Node node : icfg) worklist.offer(node);
+        workList.clear();
+        for (Node node : icfg) workList.offer(node);
 
-        while (!worklist.isEmpty()) {
-            Node node = worklist.poll();
+        while (!workList.isEmpty()) {
+            Node node = workList.poll();
             assert node != null;
 
             Fact meet_of_all_preds = analysis.newInitialFact();
@@ -89,7 +86,7 @@ class InterSolver<Method, Node, Fact> {
             boolean if_out_changed = analysis.transferNode(node, result.getInFact(node), result.getOutFact(node));
             if (if_out_changed) {
                 for (Node succ : icfg.getSuccsOf(node)) {
-                    worklist.offer(succ);
+                    workList.offer(succ);
                 }
             }
         }
