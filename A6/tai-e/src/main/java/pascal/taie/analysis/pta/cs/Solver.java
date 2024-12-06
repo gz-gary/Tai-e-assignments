@@ -138,7 +138,10 @@ class Solver {
         public Void visit(New newStmt) {
             CSVar ptr = csManager.getCSVar(context, newStmt.getLValue());
             Obj obj = heapModel.getObj(newStmt);
-            CSObj csObj = csManager.getCSObj(context, obj);
+
+            Context objContext = contextSelector.selectHeapContext(csMethod, obj);
+            CSObj csObj = csManager.getCSObj(objContext, obj);
+
             PointsToSet objSet = PointsToSetFactory.make(csObj);
             workList.addEntry(ptr, objSet);
             return null;
