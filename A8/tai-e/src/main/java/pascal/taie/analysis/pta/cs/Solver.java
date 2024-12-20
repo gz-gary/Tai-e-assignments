@@ -57,6 +57,7 @@ import pascal.taie.analysis.pta.pts.PointsToSet;
 import pascal.taie.analysis.pta.pts.PointsToSetFactory;
 import pascal.taie.config.AnalysisOptions;
 import pascal.taie.ir.exp.InvokeExp;
+import pascal.taie.ir.exp.InvokeVirtual;
 import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.Copy;
 import pascal.taie.ir.stmt.Invoke;
@@ -70,6 +71,7 @@ import pascal.taie.ir.stmt.StoreField;
 import pascal.taie.language.classes.JField;
 import pascal.taie.language.classes.JMethod;
 import pascal.taie.language.type.Type;
+import pascal.taie.util.collection.Pair;
 
 public class Solver {
 
@@ -93,9 +95,9 @@ public class Solver {
 
     private PointerAnalysisResult result;
 
-    private final Map<Var, Set<Invoke>> varAsArgInvokeSite;
+    private final Map<Var, Set<Pair<Invoke, Integer>>> varAsArgInvokeSite;
 
-    private Set<Invoke> getVarAsArgInvokeSites(Var x) {
+    private Set<Pair<Invoke, Integer>> getVarAsArgInvokeSites(Var x) {
         return varAsArgInvokeSite.getOrDefault(x, new HashSet<>());
     };
 
@@ -125,6 +127,22 @@ public class Solver {
 
     void solve() {
         initialize();
+        analyze();
+        /* Do taints transfer when callgraph construction is complete */
+        for (CSMethod csMethod : callGraph.getNodes()) {
+            for (Stmt stmt : csMethod.getMethod().getIR().getStmts()) {
+                if (stmt instanceof Invoke invoke) {
+                    if (invoke.isStatic() && invoke.getLValue() != null) {
+                        CSVar resultOutside = csManager.getCSVar(csMethod.getContext(), invoke.getLValue());
+                        workList.addEntry(
+                            resultOutside,
+                            taintAnalysis.getTaintObjects(resolveCallee(null, invoke), invoke)
+                        );
+                    }
+                }
+            }
+        }
+        /* analyze again with taint objects */
         analyze();
         taintAnalysis.onFinish();
     }
@@ -156,8 +174,8 @@ public class Solver {
                     InvokeExp invokeExp = invoke.getInvokeExp();
                     for (int i = 0; i < invokeExp.getArgCount(); ++i) {
                         Var arg = invokeExp.getArg(i);
-                        Set<Invoke> lst = varAsArgInvokeSite.getOrDefault(arg, new HashSet<>());
-                        lst.add(invoke);
+                        Set<Pair<Invoke, Integer>> lst = varAsArgInvokeSite.getOrDefault(arg, new HashSet<>());
+                        lst.add(new Pair<>(invoke, i));
                         varAsArgInvokeSite.put(arg, lst);
                     }
                 }
@@ -255,11 +273,6 @@ public class Solver {
 
                     if (invoke.getLValue() != null) {
                         CSVar resultOutside = csManager.getCSVar(context, invoke.getLValue());
-                        workList.addEntry(
-                            resultOutside,
-                            taintAnalysis.getTaintObjects(csTarget.getMethod(), invoke)
-                        );
-
                         callTarget.getIR().getReturnVars();
                         for (Var returnVar : callTarget.getIR().getReturnVars()) {
                             CSVar resultInside = csManager.getCSVar(targetContext, returnVar);
@@ -321,6 +334,67 @@ public class Solver {
                     }
                     
                     processCall(ptr, obj);
+                }
+                for (CSObj csObj : deltaSet) if (
+                    taintAnalysis.isTaint(csObj.getObject())
+                    // && csObj.getContext().equals(contextSelector.getEmptyContext())
+                ) {
+                    /* handle base to result rules */
+                    for (Invoke invoke : ptr.getVar().getInvokes()) {
+                        if (invoke.getLValue() == null) continue;
+                        CSCallSite csCallSite = csManager.getCSCallSite(ptr.getContext(), invoke);
+                        for (CSMethod csMethod : callGraph.getCalleesOf(csCallSite)) {
+                            JMethod method = csMethod.getMethod();
+                            for (Type type : taintAnalysis.getMatchBaseToResultTypes(method)) {
+                                CSVar returnVar = csManager.getCSVar(ptr.getContext(), invoke.getLValue());
+                                CSObj newTaintObj = csManager.getCSObj(
+                                    csObj.getContext(),
+                                    taintAnalysis.makeTaint(taintAnalysis.getSourceCall(csObj.getObject()), type)
+                                );
+                                workList.addEntry(returnVar, PointsToSetFactory.make(newTaintObj));
+                            }
+                        }
+                    }
+
+                    /* handle arg to result rules */
+                    for (Pair<Invoke, Integer> pair : getVarAsArgInvokeSites(ptr.getVar())) {
+                        Invoke invoke = pair.first();
+                        if (invoke.getLValue() == null) continue;
+                        int idx = pair.second();
+                        CSCallSite csCallSite = csManager.getCSCallSite(ptr.getContext(), invoke);
+                        for (CSMethod csMethod : callGraph.getCalleesOf(csCallSite)) {
+                            JMethod method = csMethod.getMethod();
+                            for (Type type : taintAnalysis.getMatchArgToResultTypes(method, idx)) {
+                                CSVar returnVar = csManager.getCSVar(ptr.getContext(), invoke.getLValue());
+                                CSObj newTaintObj = csManager.getCSObj(
+                                    contextSelector.getEmptyContext(),
+                                    taintAnalysis.makeTaint(taintAnalysis.getSourceCall(csObj.getObject()), type)
+                                );
+                                workList.addEntry(returnVar, PointsToSetFactory.make(newTaintObj));
+                            }
+                        }
+                    }
+
+                    /* handle arg to base rules */
+                    for (Pair<Invoke, Integer> pair : getVarAsArgInvokeSites(ptr.getVar())) {
+                        Invoke invoke = pair.first();
+                        int idx = pair.second();
+                        if (invoke.getInvokeExp() instanceof InvokeVirtual invokeVirtual) {
+                            Var base = invokeVirtual.getBase();
+                            CSVar csBase = csManager.getCSVar(csObj.getContext(), base);
+                            CSCallSite csCallSite = csManager.getCSCallSite(ptr.getContext(), invoke);
+                            for (CSMethod csMethod : callGraph.getCalleesOf(csCallSite)) {
+                                JMethod method = csMethod.getMethod();
+                                for (Type type : taintAnalysis.getMatchArgToBaseTypes(method, idx)) {
+                                    CSObj newTaintObj = csManager.getCSObj(
+                                        contextSelector.getEmptyContext(),
+                                        taintAnalysis.makeTaint(taintAnalysis.getSourceCall(csObj.getObject()), type)
+                                    );
+                                    workList.addEntry(csBase, PointsToSetFactory.make(newTaintObj));
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

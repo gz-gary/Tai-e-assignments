@@ -22,6 +22,7 @@
 
 package pascal.taie.analysis.pta.plugin.taint;
 
+import java.util.HashSet;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -37,11 +38,13 @@ import pascal.taie.analysis.pta.core.cs.element.CSManager;
 import pascal.taie.analysis.pta.core.cs.element.CSMethod;
 import pascal.taie.analysis.pta.core.cs.element.CSObj;
 import pascal.taie.analysis.pta.core.cs.element.CSVar;
+import pascal.taie.analysis.pta.core.heap.Obj;
 import pascal.taie.analysis.pta.cs.Solver;
 import pascal.taie.analysis.pta.pts.PointsToSet;
 import pascal.taie.analysis.pta.pts.PointsToSetFactory;
 import pascal.taie.ir.stmt.Invoke;
 import pascal.taie.language.classes.JMethod;
+import pascal.taie.language.type.Type;
 
 public class TaintAnalysiss {
 
@@ -56,6 +59,8 @@ public class TaintAnalysiss {
     private final CSManager csManager;
 
     private final Context emptyContext;
+    
+    private final CallGraph<CSCallSite, CSMethod> callgraph;
 
     public TaintAnalysiss(Solver solver) {
         manager = new TaintManager();
@@ -67,6 +72,7 @@ public class TaintAnalysiss {
                 World.get().getClassHierarchy(),
                 World.get().getTypeSystem());
         logger.info(config);
+        callgraph = solver.getCSCallGraph();
     }
 
     public PointsToSet getTaintObjects(JMethod method, Invoke callSite) {
@@ -81,7 +87,60 @@ public class TaintAnalysiss {
         return taintObjects;
     }
 
-    // TODO - finish me
+    public boolean isTaint(Obj obj) {
+        return manager.isTaint(obj);
+    }
+
+    public Obj makeTaint(Invoke callSite, Type type) {
+        return manager.makeTaint(callSite, type);
+    }
+
+    public Invoke getSourceCall(Obj obj) {
+        if (!isTaint(obj)) return null;
+        return manager.getSourceCall(obj);
+    }
+
+    public Set<Type> getMatchBaseToResultTypes(JMethod method) {
+        Set<Type> types = new HashSet<>();
+        for (TaintTransfer transfer : config.getTransfers()) {
+            if (
+                transfer.method() == method
+                && transfer.from() == TaintTransfer.BASE
+                && transfer.to() == TaintTransfer.RESULT
+            ) {
+                types.add(transfer.type());
+            }
+        }
+        return types;
+    }
+
+    public Set<Type> getMatchArgToResultTypes(JMethod method, int idx) {
+        Set<Type> types = new HashSet<>();
+        for (TaintTransfer transfer : config.getTransfers()) {
+            if (
+                transfer.method() == method
+                && transfer.from() == idx
+                && transfer.to() == TaintTransfer.RESULT
+            ) {
+                types.add(transfer.type());
+            }
+        }
+        return types;
+    }
+
+    public Set<Type> getMatchArgToBaseTypes(JMethod method, int idx) {
+        Set<Type> types = new HashSet<>();
+        for (TaintTransfer transfer : config.getTransfers()) {
+            if (
+                transfer.method() == method
+                && transfer.from() == idx
+                && transfer.to() == TaintTransfer.BASE
+            ) {
+                types.add(transfer.type());
+            }
+        }
+        return types;
+    }
 
     public void onFinish() {
         Set<TaintFlow> taintFlows = collectTaintFlows();
@@ -91,7 +150,6 @@ public class TaintAnalysiss {
     private Set<TaintFlow> collectTaintFlows() {
         Set<TaintFlow> taintFlows = new TreeSet<>();
         PointerAnalysisResult result = solver.getResult();
-        CallGraph<CSCallSite, CSMethod> callgraph = result.getCSCallGraph();
         for (CSMethod csMethod : callgraph.getNodes()) {
             JMethod method = csMethod.getMethod();
             for (CSCallSite csCallSite : callgraph.getCallersOf(csMethod)) {
