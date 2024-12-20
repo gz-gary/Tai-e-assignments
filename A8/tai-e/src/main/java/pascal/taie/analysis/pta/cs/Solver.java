@@ -348,7 +348,7 @@ public class Solver {
                             for (Type type : taintAnalysis.getMatchBaseToResultTypes(method)) {
                                 CSVar returnVar = csManager.getCSVar(ptr.getContext(), invoke.getLValue());
                                 CSObj newTaintObj = csManager.getCSObj(
-                                    csObj.getContext(),
+                                    contextSelector.getEmptyContext(),
                                     taintAnalysis.makeTaint(taintAnalysis.getSourceCall(csObj.getObject()), type)
                                 );
                                 workList.addEntry(returnVar, PointsToSetFactory.make(newTaintObj));
@@ -381,7 +381,7 @@ public class Solver {
                         int idx = pair.second();
                         if (invoke.getInvokeExp() instanceof InvokeVirtual invokeVirtual) {
                             Var base = invokeVirtual.getBase();
-                            CSVar csBase = csManager.getCSVar(csObj.getContext(), base);
+                            CSVar csBase = csManager.getCSVar(ptr.getContext(), base);
                             CSCallSite csCallSite = csManager.getCSCallSite(ptr.getContext(), invoke);
                             for (CSMethod csMethod : callGraph.getCalleesOf(csCallSite)) {
                                 JMethod method = csMethod.getMethod();
