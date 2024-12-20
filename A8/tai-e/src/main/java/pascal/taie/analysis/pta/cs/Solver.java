@@ -22,6 +22,12 @@
 
 package pascal.taie.analysis.pta.cs;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,6 +56,7 @@ import pascal.taie.analysis.pta.plugin.taint.TaintAnalysiss;
 import pascal.taie.analysis.pta.pts.PointsToSet;
 import pascal.taie.analysis.pta.pts.PointsToSetFactory;
 import pascal.taie.config.AnalysisOptions;
+import pascal.taie.ir.exp.InvokeExp;
 import pascal.taie.ir.exp.Var;
 import pascal.taie.ir.stmt.Copy;
 import pascal.taie.ir.stmt.Invoke;
@@ -86,11 +93,18 @@ public class Solver {
 
     private PointerAnalysisResult result;
 
+    private final Map<Var, Set<Invoke>> varAsArgInvokeSite;
+
+    private Set<Invoke> getVarAsArgInvokeSites(Var x) {
+        return varAsArgInvokeSite.getOrDefault(x, new HashSet<>());
+    };
+
     Solver(AnalysisOptions options, HeapModel heapModel,
            ContextSelector contextSelector) {
         this.options = options;
         this.heapModel = heapModel;
         this.contextSelector = contextSelector;
+        this.varAsArgInvokeSite = new HashMap<>();
     }
 
     public AnalysisOptions getOptions() {
@@ -103,6 +117,10 @@ public class Solver {
 
     public CSManager getCSManager() {
         return csManager;
+    }
+
+    public CSCallGraph getCSCallGraph() {
+        return callGraph;
     }
 
     void solve() {
@@ -131,7 +149,22 @@ public class Solver {
     private void addReachable(CSMethod csMethod) {
         StmtProcessor stmtProcessor = new StmtProcessor(csMethod);
         if (callGraph.addReachableMethod(csMethod)) {
-            for (Stmt stmt : csMethod.getMethod().getIR().getStmts()) {
+            /* record where var is used as arg */
+            List<Stmt> stmts = csMethod.getMethod().getIR().getStmts();
+            for (Stmt stmt : stmts) {
+                if (stmt instanceof Invoke invoke) {
+                    InvokeExp invokeExp = invoke.getInvokeExp();
+                    for (int i = 0; i < invokeExp.getArgCount(); ++i) {
+                        Var arg = invokeExp.getArg(i);
+                        Set<Invoke> lst = varAsArgInvokeSite.getOrDefault(arg, new HashSet<>());
+                        lst.add(invoke);
+                        varAsArgInvokeSite.put(arg, lst);
+                    }
+                }
+            }
+
+
+            for (Stmt stmt : stmts) {
                 stmt.accept(stmtProcessor);
             }
         }
@@ -222,6 +255,11 @@ public class Solver {
 
                     if (invoke.getLValue() != null) {
                         CSVar resultOutside = csManager.getCSVar(context, invoke.getLValue());
+                        workList.addEntry(
+                            resultOutside,
+                            taintAnalysis.getTaintObjects(csTarget.getMethod(), invoke)
+                        );
+
                         callTarget.getIR().getReturnVars();
                         for (Var returnVar : callTarget.getIR().getReturnVars()) {
                             CSVar resultInside = csManager.getCSVar(targetContext, returnVar);

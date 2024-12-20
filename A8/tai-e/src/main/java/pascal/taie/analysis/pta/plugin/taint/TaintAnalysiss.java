@@ -22,17 +22,26 @@
 
 package pascal.taie.analysis.pta.plugin.taint;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import pascal.taie.World;
-import pascal.taie.analysis.pta.PointerAnalysisResult;
-import pascal.taie.analysis.pta.core.cs.context.Context;
-import pascal.taie.analysis.pta.core.cs.element.CSManager;
-import pascal.taie.analysis.pta.cs.Solver;
-
-import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import pascal.taie.World;
+import pascal.taie.analysis.graph.callgraph.CallGraph;
+import pascal.taie.analysis.pta.PointerAnalysisResult;
+import pascal.taie.analysis.pta.core.cs.context.Context;
+import pascal.taie.analysis.pta.core.cs.element.CSCallSite;
+import pascal.taie.analysis.pta.core.cs.element.CSManager;
+import pascal.taie.analysis.pta.core.cs.element.CSMethod;
+import pascal.taie.analysis.pta.core.cs.element.CSObj;
+import pascal.taie.analysis.pta.core.cs.element.CSVar;
+import pascal.taie.analysis.pta.cs.Solver;
+import pascal.taie.analysis.pta.pts.PointsToSet;
+import pascal.taie.analysis.pta.pts.PointsToSetFactory;
+import pascal.taie.ir.stmt.Invoke;
+import pascal.taie.language.classes.JMethod;
 
 public class TaintAnalysiss {
 
@@ -60,6 +69,18 @@ public class TaintAnalysiss {
         logger.info(config);
     }
 
+    public PointsToSet getTaintObjects(JMethod method, Invoke callSite) {
+        PointsToSet taintObjects = PointsToSetFactory.make();
+        for (Source source : config.getSources()) {
+            if (source.method() == method) {
+                taintObjects.addObject(
+                    csManager.getCSObj(emptyContext, manager.makeTaint(callSite, source.type()))
+                );
+            }
+        }
+        return taintObjects;
+    }
+
     // TODO - finish me
 
     public void onFinish() {
@@ -70,7 +91,30 @@ public class TaintAnalysiss {
     private Set<TaintFlow> collectTaintFlows() {
         Set<TaintFlow> taintFlows = new TreeSet<>();
         PointerAnalysisResult result = solver.getResult();
-        // TODO - finish me
+        CallGraph<CSCallSite, CSMethod> callgraph = result.getCSCallGraph();
+        for (CSMethod csMethod : callgraph.getNodes()) {
+            JMethod method = csMethod.getMethod();
+            for (CSCallSite csCallSite : callgraph.getCallersOf(csMethod)) {
+                for (Sink sink : config.getSinks()) {
+                    if (sink.method() == method) {
+                        int idx = sink.index();
+                        CSVar csArg = csManager.getCSVar(
+                            csCallSite.getContext(),
+                            csCallSite.getCallSite().getInvokeExp().getArg(idx)
+                        );
+                        for (CSObj csObj : result.getPointsToSet(csArg)) {
+                            if (manager.isTaint(csObj.getObject())) {
+                                Invoke sourceCall = manager.getSourceCall(csObj.getObject());
+                                if (sourceCall != null) {
+                                    Invoke sinkCall = csCallSite.getCallSite();
+                                    taintFlows.add(new TaintFlow(sourceCall, sinkCall, idx));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         // You could query pointer analysis results you need via variable result.
         return taintFlows;
     }
